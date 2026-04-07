@@ -298,7 +298,9 @@ const handleSearch = () => {
     return;
   }
   pageState.resetPage();
-  navigate(`${baseUrl}?search=${search}`);
+  const searchUrl = new URL(baseUrl, window.location.origin);
+  searchUrl.searchParams.set("search", search);
+  navigate(`${searchUrl.pathname}${searchUrl.search}`);
   removeMovieList();
   loadSearchMovies();
 };
