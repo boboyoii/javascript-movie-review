@@ -40,6 +40,7 @@ const hasSearchParams = (queryKey) => {
 };
 const apiUrl = "https://api.themoviedb.org/3";
 const apiKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmMWJhN2U3MjZiNzFjYTA2NzhhNDk0YmNjZGEwNTJmNyIsIm5iZiI6MTc3MDAxMDg1Ni4xNDcsInN1YiI6IjY5ODAzOGU4NmU1ZDViMzVhYjFiZDk1YiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.6Enl0Fcm7_Zz6xTIjoVDG30wdPxkJxPaV3VS19WFwn4";
+const baseUrl = "/javascript-movie-review/";
 class ApiError extends Error {
   status_code;
   constructor(message, status_code) {
@@ -251,9 +252,10 @@ const loadPopularMovies = async () => {
       renderMovieList(movies);
       updateMoreButton(movies.page, movies.total_pages);
     }
-    removeSkeleton();
   } catch (e) {
     showErrorAlert(e);
+  } finally {
+    removeSkeleton();
   }
 };
 const loadSearchMovies = async () => {
@@ -296,11 +298,15 @@ const handleSearch = () => {
     return;
   }
   pageState.resetPage();
-  navigate(`/?search=${search}`);
+  navigate(`${baseUrl}?search=${search}`);
   removeMovieList();
   loadSearchMovies();
 };
 addEventListener("load", () => {
+  const logo = document.querySelector(".logo");
+  logo?.addEventListener("click", () => {
+    window.location.href = baseUrl;
+  });
   const searchButton = document.querySelector("#search-button");
   searchButton?.addEventListener("click", () => {
     handleSearch();
