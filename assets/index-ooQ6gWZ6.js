@@ -48,7 +48,7 @@ class ApiError extends Error {
     this.status_code = status_code;
   }
 }
-const getMoviePopular = async ({
+const getPopularMovies = async ({
   page
 }) => {
   const url = `${apiUrl}/movie/popular?page=${page}`;
@@ -62,7 +62,7 @@ const getMoviePopular = async ({
   const errorBody = await res.json();
   throw new ApiError(errorBody.status_message, errorBody.status_code);
 };
-const getTopRatedMovie = async () => {
+const getTopRatedMovies = async () => {
   const url = `${apiUrl}/movie/top_rated`;
   const res = await fetch(url, {
     method: "get",
@@ -70,9 +70,11 @@ const getTopRatedMovie = async () => {
       Authorization: `Bearer ${apiKey}`
     }
   });
-  return await res.json();
+  if (res.ok) return await res.json();
+  const errorBody = await res.json();
+  throw new ApiError(errorBody.status_message, errorBody.status_code);
 };
-const getSearchMovie = async ({
+const getSearchMovies = async ({
   page,
   query
 }) => {
@@ -83,21 +85,22 @@ const getSearchMovie = async ({
       Authorization: `Bearer ${apiKey}`
     }
   });
-  return await res.json();
+  if (res.ok) return await res.json();
+  const errorBody = await res.json();
+  throw new ApiError(errorBody.status_message, errorBody.status_code);
 };
-const renderTopRatedMovie = (movies) => {
-  const topRatedMovie = movies.results[0];
+const renderTopRatedMovie = (movie) => {
   const topRatedContainer = document.querySelector(".top-rated-container");
   if (!topRatedContainer) return null;
   const overlay = document.querySelector(".overlay");
   if (!overlay) return null;
-  overlay.style.background = `url(${`https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces` + topRatedMovie.backdrop_path}) center center no-repeat`;
+  overlay.style.background = `url(${`https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces` + movie.backdrop_path}) center center no-repeat`;
   const rateValue = topRatedContainer.querySelector(".rate-value");
   if (!rateValue) return null;
-  rateValue.textContent = topRatedMovie.vote_average.toString();
+  rateValue.textContent = movie.vote_average.toString();
   const title = topRatedContainer.querySelector(".title");
   if (!title) return null;
-  title.textContent = topRatedMovie.title;
+  title.textContent = movie.title;
 };
 const removeTopRatedMovie = () => {
   const topRatedMovie = document.querySelector(".top-rated-movie");
@@ -123,6 +126,13 @@ const removeMoreButton = () => {
   const moreButton = document.querySelector("#more-button");
   if (!moreButton) return null;
   moreButton.style.display = "none";
+};
+const updateMoreButton = (currentPage, totalPages) => {
+  if (currentPage === totalPages) {
+    removeMoreButton();
+    return;
+  }
+  renderMoreButton();
 };
 const createMovieNode = (movie) => {
   const movieTemplate = document.querySelector(`#movie-template`);
@@ -154,11 +164,6 @@ const renderMovieList = (movies) => {
       movieList?.appendChild(movieNode);
     }
   });
-  if (movies.page === movies.total_pages) {
-    removeMoreButton();
-  } else {
-    renderMoreButton();
-  }
 };
 const renderNoResult = () => {
   const noResult = document.querySelector("#no-result");
@@ -212,7 +217,7 @@ class PageState {
   getPage() {
     return this.#page;
   }
-  increamentPage() {
+  incrementPage() {
     this.#page += 1;
   }
   resetPage() {
@@ -220,11 +225,42 @@ class PageState {
   }
 }
 const pageState = new PageState();
-const runSearch = () => {
-  const search = getSearchParams("search");
-  (async () => {
+const showErrorAlert = (error) => {
+  if (error instanceof ApiError && error.status_code === 22) {
+    alert("잘못된 페이지 요청입니다.");
+    return;
+  }
+  alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+};
+const loadTopRatedMovie = async () => {
+  try {
+    const topRatedMovies = await getTopRatedMovies();
+    const topRatedMovie = topRatedMovies.results[0];
+    if (!topRatedMovie) return;
+    renderTopRatedMovie(topRatedMovie);
+  } catch (e) {
+    showErrorAlert(e);
+  }
+};
+const loadPopularMovies = async () => {
+  try {
+    renderSkeleton();
     const page = pageState.getPage();
-    const movies = await getSearchMovie({
+    const movies = await getPopularMovies({ page });
+    if (movies) {
+      renderMovieList(movies);
+      updateMoreButton(movies.page, movies.total_pages);
+    }
+    removeSkeleton();
+  } catch (e) {
+    showErrorAlert(e);
+  }
+};
+const loadSearchMovies = async () => {
+  try {
+    const search = getSearchParams("search");
+    const page = pageState.getPage();
+    const movies = await getSearchMovies({
       page,
       query: search || ""
     });
@@ -234,10 +270,22 @@ const runSearch = () => {
     movieListTitle.textContent = `"${search}" 검색 결과`;
     if (movies.results.length) {
       renderMovieList(movies);
+      updateMoreButton(movies.page, movies.total_pages);
     } else {
       renderNoResult();
     }
-  })();
+  } catch (e) {
+    showErrorAlert(e);
+  }
+};
+const loadMoreMovies = async () => {
+  pageState.incrementPage();
+  const isSearchParams = hasSearchParams("search");
+  if (isSearchParams) {
+    loadSearchMovies();
+    return;
+  }
+  loadPopularMovies();
 };
 const handleSearch = () => {
   const searchInput = document.querySelector("#search-input");
@@ -250,68 +298,23 @@ const handleSearch = () => {
   pageState.resetPage();
   navigate(`/?search=${search}`);
   removeMovieList();
-  runSearch();
+  loadSearchMovies();
 };
-const errorTryCatch = async (api, errorCallback) => {
-  try {
-    return await api();
-  } catch (e) {
-    errorCallback(e);
-  }
-};
-addEventListener("load", async () => {
-  (async () => {
-    const topRatedMovies = await getTopRatedMovie();
-    renderTopRatedMovie(topRatedMovies);
-  })();
-  (async () => {
-    renderSkeleton();
-    const page = pageState.getPage();
-    const movies = await errorTryCatch(
-      async () => await getMoviePopular({ page }),
-      async (e) => {
-        if (e.status_code == 22) {
-          alert("잘못된 페이지 요청입니다.");
-          return;
-        }
-        alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-      }
-    );
-    if (movies) renderMovieList(movies);
-    removeSkeleton();
-  })();
-  const moreButton = document.querySelector("#more-button");
-  moreButton?.addEventListener("click", () => {
-    pageState.increamentPage();
-    const isSearchParams = hasSearchParams("search");
-    if (isSearchParams) {
-      runSearch();
-      return;
-    }
-    (async () => {
-      const page = pageState.getPage();
-      const movies = await errorTryCatch(
-        async () => await getMoviePopular({ page }),
-        async (e) => {
-          if (e.status_code == 22) {
-            alert("잘못된 페이지 요청입니다.");
-            return;
-          }
-          alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        }
-      );
-      if (movies) renderMovieList(movies);
-    })();
-  });
+addEventListener("load", () => {
   const searchButton = document.querySelector("#search-button");
   searchButton?.addEventListener("click", () => {
     handleSearch();
   });
   const searchInput = document.querySelector("#search-input");
-  if (!searchInput) return;
   searchInput?.addEventListener("keyup", (e) => {
     if (e.key === "Enter") {
       handleSearch();
     }
   });
+  const moreButton = document.querySelector("#more-button");
+  moreButton?.addEventListener("click", () => {
+    loadMoreMovies();
+  });
+  loadTopRatedMovie();
+  loadPopularMovies();
 });
