@@ -159,6 +159,8 @@ const createMovieNode = (movie) => {
 };
 const renderMovieList = (movies) => {
   const movieList = document.querySelector("#movie-list");
+  if (!movieList) return;
+  movieList.hidden = false;
   movies.results.forEach((movie) => {
     const movieNode = createMovieNode(movie);
     if (movieNode) {
@@ -181,39 +183,28 @@ const renderNoResult = () => {
   removeMoreButton();
 };
 const removeMovieList = () => {
-  const movieList = document.querySelector("#movie-list");
-  if (!movieList) return;
   const noResult = document.querySelector("#no-result");
-  if (!noResult) return;
-  movieList.replaceChildren();
-  noResult.replaceChildren();
+  noResult?.replaceChildren();
+  const movieList = document.querySelector("#movie-list");
+  movieList?.replaceChildren();
+  if (movieList) {
+    movieList.hidden = true;
+  }
 };
 const renderSkeleton = () => {
   const skeleton = document.querySelector("#skeleton");
   if (!skeleton) return;
-  const skeletonTemplate = document.querySelector("#movie-template");
-  if (!skeletonTemplate) return null;
-  for (let i = 0; i < 20; i++) {
-    const skeletonCloneNode = skeletonTemplate.content.cloneNode(
-      true
-    );
-    if (!skeletonCloneNode) return null;
-    skeleton.appendChild(skeletonCloneNode);
-  }
+  skeleton.hidden = false;
 };
 const removeSkeleton = () => {
   const skeleton = document.querySelector("#skeleton");
   if (!skeleton) return;
-  skeleton.classList.add("animation");
-  setTimeout(() => {
-    skeleton.classList.remove("animation");
-    skeleton.replaceChildren();
-  }, 3e3);
+  skeleton.hidden = true;
 };
 class PageState {
   #page;
   constructor() {
-    this.#page = 1;
+    this.#page = 0;
   }
   getPage() {
     return this.#page;
@@ -222,10 +213,11 @@ class PageState {
     this.#page += 1;
   }
   resetPage() {
-    this.#page = 1;
+    this.#page = 0;
   }
 }
-const pageState = new PageState();
+const popularPageState = new PageState();
+const searchPageState = new PageState();
 const showErrorAlert = (error) => {
   if (error instanceof ApiError && error.status_code === 22) {
     alert("잘못된 페이지 요청입니다.");
@@ -246,11 +238,12 @@ const loadTopRatedMovie = async () => {
 const loadPopularMovies = async () => {
   try {
     renderSkeleton();
-    const page = pageState.getPage();
+    const page = popularPageState.getPage() + 1;
     const movies = await getPopularMovies({ page });
     if (movies) {
       renderMovieList(movies);
       updateMoreButton(movies.page, movies.total_pages);
+      popularPageState.incrementPage();
     }
   } catch (e) {
     showErrorAlert(e);
@@ -260,8 +253,9 @@ const loadPopularMovies = async () => {
 };
 const loadSearchMovies = async () => {
   try {
+    renderSkeleton();
     const search = getSearchParams("search");
-    const page = pageState.getPage();
+    const page = searchPageState.getPage() + 1;
     const movies = await getSearchMovies({
       page,
       query: search || ""
@@ -273,15 +267,17 @@ const loadSearchMovies = async () => {
     if (movies.results.length) {
       renderMovieList(movies);
       updateMoreButton(movies.page, movies.total_pages);
+      searchPageState.incrementPage();
     } else {
       renderNoResult();
     }
   } catch (e) {
     showErrorAlert(e);
+  } finally {
+    removeSkeleton();
   }
 };
-const loadMoreMovies = async () => {
-  pageState.incrementPage();
+const loadMoreMovies = () => {
   const isSearchParams = hasSearchParams("search");
   if (isSearchParams) {
     loadSearchMovies();
@@ -297,7 +293,7 @@ const handleSearch = () => {
     searchInput.focus();
     return;
   }
-  pageState.resetPage();
+  searchPageState.resetPage();
   const searchUrl = new URL(baseUrl, window.location.origin);
   searchUrl.searchParams.set("search", search);
   navigate(`${searchUrl.pathname}${searchUrl.search}`);
@@ -323,6 +319,10 @@ addEventListener("load", () => {
   moreButton?.addEventListener("click", () => {
     loadMoreMovies();
   });
+  if (hasSearchParams("search")) {
+    loadSearchMovies();
+    return;
+  }
   loadTopRatedMovie();
   loadPopularMovies();
 });
