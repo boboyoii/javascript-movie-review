@@ -111,16 +111,15 @@ const removeTopRatedMovie = () => {
   if (topRatedMovie) {
     topRatedMovie.style.display = "none";
   }
-  const background = document.querySelector(
+  const topRatedContainer = document.querySelector(
     ".background-container"
   );
-  if (background) {
-    background.style.backgroundColor = "transparent";
-    background.style.height = "auto";
+  if (topRatedContainer) {
+    topRatedContainer.style.backgroundImage = "";
+    topRatedContainer.style.height = "auto";
   }
   const overlay = document.querySelector(".overlay");
   if (overlay) {
-    overlay.style.background = "";
     overlay.style.display = "none";
   }
 };
