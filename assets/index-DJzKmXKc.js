@@ -248,6 +248,12 @@ const RATING_TEXTS = [
   "명작이에요"
 ];
 const RATING_SCORES = ["2", "4", "6", "8", "10"];
+const setLocalStorage = (key, value) => {
+  window.localStorage.setItem(key, value);
+};
+const getLocalStorage = (key) => {
+  return window.localStorage.getItem(key);
+};
 const renderMovieDetail = (movieDetail) => {
   const movieModal = document.querySelector(".modal");
   if (!movieModal) return;
@@ -268,7 +274,7 @@ const renderMovieDetail = (movieDetail) => {
   if (title) title.textContent = movieDetail.title;
   if (rate) rate.textContent = movieDetail.vote_average.toString();
   if (detail) detail.textContent = movieDetail.overview;
-  const ratingScore = window.localStorage.getItem(String(movieDetail.id));
+  const ratingScore = getLocalStorage(String(movieDetail.id));
   if (!ratingScore) return;
   const index = RATING_SCORES.indexOf(ratingScore);
   fillStars(index);
@@ -367,8 +373,12 @@ const loadMovieList = () => {
   loadPopularMovies();
 };
 const loadMovieDetail = async (movieId) => {
-  const movieDetail = await getMovieDetail(movieId);
-  renderMovieDetail(movieDetail);
+  try {
+    const movieDetail = await getMovieDetail(movieId);
+    renderMovieDetail(movieDetail);
+  } catch (e) {
+    showError(e);
+  }
 };
 const openMovieModal = () => {
   const movieModal = document.querySelector("#modal-background");
@@ -397,9 +407,6 @@ const handleModalCloseButtonClick = () => {
 };
 const handleModalEscapeKeydown = handleModalCloseButtonClick;
 const handleModalBackdropClick = handleModalCloseButtonClick;
-const setLocalStorage = (key, value) => {
-  window.localStorage.setItem(key, value);
-};
 const handleRatingStarClick = (index) => {
   fillStars(index);
   updateRatingResult(index);
