@@ -38,11 +38,8 @@ class ApiError extends Error {
     this.status_code = status_code;
   }
 }
-const getPopularMovies = async ({
-  page
-}) => {
-  const url = `${apiUrl}/movie/popular?page=${page}&language=ko-KR`;
-  const res = await fetch(url, {
+const requestGet = async (path) => {
+  const res = await fetch(`${apiUrl}${path}`, {
     method: "get",
     headers: {
       Authorization: `Bearer ${apiKey}`
@@ -52,51 +49,35 @@ const getPopularMovies = async ({
   const errorBody = await res.json();
   throw new ApiError(errorBody.status_message, errorBody.status_code);
 };
+const getPopularMovies = async ({
+  page
+}) => {
+  return requestGet(`/movie/popular?page=${page}&language=ko-KR`);
+};
 const getTopRatedMovies = async () => {
-  const url = `${apiUrl}/movie/top_rated?language=ko-KR`;
-  const res = await fetch(url, {
-    method: "get",
-    headers: {
-      Authorization: `Bearer ${apiKey}`
-    }
-  });
-  if (res.ok) return await res.json();
-  const errorBody = await res.json();
-  throw new ApiError(errorBody.status_message, errorBody.status_code);
+  return requestGet(`/movie/top_rated?language=ko-KR`);
 };
 const getSearchMovies = async ({
   page,
   query
 }) => {
-  const url = `${apiUrl}/search/movie?page=${page}&query=${query}&language=ko-KR`;
-  const res = await fetch(url, {
-    method: "get",
-    headers: {
-      Authorization: `Bearer ${apiKey}`
-    }
-  });
-  if (res.ok) return await res.json();
-  const errorBody = await res.json();
-  throw new ApiError(errorBody.status_message, errorBody.status_code);
+  return requestGet(
+    `/search/movie?page=${page}&query=${query}&language=ko-KR`
+  );
 };
 const getMovieDetail = async (movieId) => {
-  const url = `${apiUrl}/movie/${movieId}?language=ko-KR`;
-  const res = await fetch(url, {
-    method: "get",
-    headers: {
-      Authorization: `Bearer ${apiKey}`
-    }
-  });
-  if (res.ok) return await res.json();
-  const errorBody = await res.json();
-  throw new ApiError(errorBody.status_message, errorBody.status_code);
+  return requestGet(`/movie/${movieId}?language=ko-KR`);
+};
+const TMDB_IMAGE_BASE_URL = "https://media.themoviedb.org/t/p";
+const getImageUrl = (path, size) => {
+  return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;
 };
 const renderTopRatedMovie = (movie) => {
   const topRatedContainer = document.querySelector(
     ".background-container"
   );
   if (!topRatedContainer) return;
-  topRatedContainer.style.backgroundImage = `url(${`https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces` + movie.backdrop_path})`;
+  topRatedContainer.style.backgroundImage = `url(${getImageUrl(movie.backdrop_path, "w1920_and_h800_multi_faces")})`;
   const rateValue = topRatedContainer.querySelector(".rate-value");
   if (rateValue) {
     rateValue.textContent = movie.vote_average.toString();
@@ -123,11 +104,6 @@ const removeTopRatedMovie = () => {
     overlay.style.display = "none";
   }
 };
-const removeMoreButton = () => {
-  const moreButton = document.querySelector("#more-button");
-  if (!moreButton) return null;
-  moreButton.style.display = "none";
-};
 const createMovieNode = (movie) => {
   const movieTemplate = document.querySelector(`#movie-template`);
   if (!movieTemplate) return null;
@@ -140,11 +116,16 @@ const createMovieNode = (movie) => {
   const title = movieFragment.querySelector(".item-desc strong");
   if (!movieItem || !thumbnail || !rate || !title) return null;
   movieItem.dataset.movieId = String(movie.id);
-  thumbnail.src = `https://media.themoviedb.org/t/p/w220_and_h330_face` + movie.poster_path;
+  thumbnail.src = getImageUrl(movie.poster_path, "w220_and_h330_face");
   thumbnail.alt = movie.title;
   rate.textContent = movie.vote_average.toString();
   title.textContent = movie.title;
   return movieFragment;
+};
+const renderSearchTitle = (search) => {
+  const movieListTitle = document.querySelector("#movie-list-title");
+  if (!movieListTitle) return null;
+  movieListTitle.textContent = `"${search}" 검색 결과`;
 };
 const renderMovieList = (movies) => {
   const movieList = document.querySelector("#movie-list");
@@ -169,7 +150,6 @@ const renderNoResult = () => {
   </p>`
   );
   noResult.innerHTML = empty;
-  removeMoreButton();
 };
 const removeMovieList = () => {
   const noResult = document.querySelector("#no-result");
@@ -182,15 +162,25 @@ const removeMovieList = () => {
     movieList.hidden = true;
   }
 };
-const renderSkeleton = () => {
-  const skeleton = document.querySelector("#skeleton");
+const renderMovieListSkeleton = () => {
+  const skeleton = document.querySelector("#skeleton-list");
   if (!skeleton) return;
   skeleton.hidden = false;
 };
-const removeSkeleton = () => {
-  const skeleton = document.querySelector("#skeleton");
+const removeMovieListSkeleton = () => {
+  const skeleton = document.querySelector("#skeleton-list");
   if (!skeleton) return;
   skeleton.hidden = true;
+};
+const renderMovieDetailSkeleton = () => {
+  const movieModal = document.querySelector(".modal");
+  if (!movieModal) return;
+  movieModal.classList.add("loading");
+};
+const removeMovieDetailSkeleton = () => {
+  const movieModal = document.querySelector(".modal");
+  if (!movieModal) return;
+  movieModal.classList.remove("loading");
 };
 class PageState {
   #page;
@@ -248,43 +238,38 @@ const RATING_TEXTS = [
   "명작이에요"
 ];
 const RATING_SCORES = ["2", "4", "6", "8", "10"];
-const setLocalStorage = (key, value) => {
-  window.localStorage.setItem(key, value);
+const isRatingScore = (value) => {
+  return value !== null && RATING_SCORES.includes(value);
 };
-const getLocalStorage = (key) => {
-  return window.localStorage.getItem(key);
-};
-const renderMovieDetail = (movieDetail) => {
-  const movieModal = document.querySelector(".modal");
-  if (!movieModal) return;
-  movieModal.dataset.movieId = String(movieDetail.id);
-  const modalImage = movieModal.querySelector(".modal-image img");
-  const title = movieModal.querySelector("h2");
-  const category = movieModal.querySelector(".category");
-  const rate = movieModal.querySelector(".rate-value");
-  const detail = movieModal.querySelector(".detail");
-  if (modalImage) {
-    modalImage.src = `https://media.themoviedb.org/t/p/w300_and_h450_face` + movieDetail.poster_path;
+const localStorageRepository = {
+  get(key) {
+    return window.localStorage.getItem(key);
+  },
+  set(key, value) {
+    window.localStorage.setItem(key, value);
   }
-  if (category) {
-    const releaseYear = new Date(movieDetail.release_date).getFullYear();
-    const genres = movieDetail.genres.map((genre) => genre.name).join(", ");
-    category.textContent = `${releaseYear} · ${genres}`;
-  }
-  if (title) title.textContent = movieDetail.title;
-  if (rate) rate.textContent = movieDetail.vote_average.toString();
-  if (detail) detail.textContent = movieDetail.overview;
-  const ratingScore = getLocalStorage(String(movieDetail.id));
-  if (!ratingScore) return;
-  const index = RATING_SCORES.indexOf(ratingScore);
-  fillStars(index);
-  updateRatingResult(index);
 };
-const clearMovieDetail = () => {
-  const movieModal = document.querySelector(".modal");
-  if (!movieModal) return;
-  const modalImage = movieModal.querySelector(".modal-image img");
-  if (modalImage) modalImage.src = "";
+const ratingStorage = localStorageRepository;
+const restoreRatingView = (movieId) => {
+  const savedRating = ratingStorage.get(movieId);
+  if (!isRatingScore(savedRating)) return;
+  const index = RATING_SCORES.indexOf(savedRating);
+  fillRatingStars(index);
+  updateRatingSummary(index);
+};
+const fillRatingStars = (index) => {
+  const stars = document.querySelectorAll(".stars img");
+  stars.forEach((currentStar, currentIndex) => {
+    currentStar.src = currentIndex <= index ? "./images/star_filled.png" : "./images/star_empty.png";
+  });
+};
+const updateRatingSummary = (index) => {
+  const ratingText = document.querySelector(".rating-text");
+  if (ratingText) ratingText.textContent = RATING_TEXTS[index];
+  const ratingValue = document.querySelector("#rating-value");
+  if (ratingValue) ratingValue.textContent = RATING_SCORES[index];
+};
+const resetRatingView = (movieModal) => {
   const stars = movieModal.querySelectorAll(".stars img");
   stars.forEach((star) => star.src = "./images/star_empty.png");
   const ratingText = movieModal.querySelector(".rating-text");
@@ -292,17 +277,48 @@ const clearMovieDetail = () => {
   const ratingValue = movieModal.querySelector("#rating-value");
   if (ratingValue) ratingValue.textContent = "0";
 };
-const fillStars = (index) => {
-  const stars = document.querySelectorAll(".stars img");
-  stars.forEach((currentStar, currentIndex) => {
-    currentStar.src = currentIndex <= index ? "./images/star_filled.png" : "./images/star_empty.png";
+const renderMovieDetail = (movieDetail) => {
+  const movieModal = document.querySelector(".modal");
+  if (!movieModal) return;
+  movieModal.dataset.movieId = String(movieDetail.id);
+  const releaseYear = new Date(movieDetail.release_date).getFullYear();
+  const genres = movieDetail.genres.map((genre) => genre.name).join(", ");
+  updateMovieDetailContent(movieModal, {
+    imageSrc: getImageUrl(movieDetail.poster_path, "w300_and_h450_face"),
+    title: movieDetail.title,
+    category: `${releaseYear} · ${genres}`,
+    rate: movieDetail.vote_average.toString(),
+    detail: movieDetail.overview
   });
+  restoreRatingView(String(movieDetail.id));
 };
-const updateRatingResult = (index) => {
-  const ratingText = document.querySelector(".rating-text");
-  if (ratingText) ratingText.textContent = RATING_TEXTS[index];
-  const ratingValue = document.querySelector("#rating-value");
-  if (ratingValue) ratingValue.textContent = RATING_SCORES[index];
+const clearMovieDetail = () => {
+  const movieModal = document.querySelector(".modal");
+  if (!movieModal) return;
+  updateMovieDetailContent(movieModal, {
+    imageSrc: "",
+    title: "",
+    category: "",
+    rate: "",
+    detail: ""
+  });
+  resetRatingView(movieModal);
+};
+const getMovieDetailElements = (movieModal) => {
+  const modalImage = movieModal.querySelector(".modal-image img");
+  const title = movieModal.querySelector("h2");
+  const category = movieModal.querySelector(".category");
+  const rate = movieModal.querySelector(".rate-value");
+  const detail = movieModal.querySelector(".detail");
+  return { modalImage, title, category, rate, detail };
+};
+const updateMovieDetailContent = (movieModal, viewData) => {
+  const { modalImage, title, category, rate, detail } = getMovieDetailElements(movieModal);
+  if (modalImage) modalImage.src = viewData.imageSrc;
+  if (title) title.textContent = viewData.title;
+  if (category) category.textContent = viewData.category;
+  if (rate) rate.textContent = viewData.rate;
+  if (detail) detail.textContent = viewData.detail;
 };
 const popularPageState = new PageState();
 const searchPageState = new PageState();
@@ -317,8 +333,9 @@ const loadTopRatedMovie = async () => {
   }
 };
 const loadPopularMovies = async () => {
+  if (popularPageState.isLastPage()) return true;
   try {
-    renderSkeleton();
+    renderMovieListSkeleton();
     const page = popularPageState.getPage() + 1;
     const movies = await getPopularMovies({ page });
     if (movies) {
@@ -326,10 +343,12 @@ const loadPopularMovies = async () => {
       popularPageState.incrementPage();
       popularPageState.setTotalPages(movies.total_pages);
     }
+    return popularPageState.isLastPage();
   } catch (e) {
     showError(e);
+    return true;
   } finally {
-    removeSkeleton();
+    removeMovieListSkeleton();
   }
 };
 const loadSearchMovies = async ({
@@ -339,8 +358,9 @@ const loadSearchMovies = async ({
     searchPageState.resetPage();
     removeMovieList();
   }
+  if (!reset && searchPageState.isLastPage()) return true;
   try {
-    renderSkeleton();
+    renderMovieListSkeleton();
     const search = getSearchParams("search");
     const page = searchPageState.getPage() + 1;
     const movies = await getSearchMovies({
@@ -348,9 +368,7 @@ const loadSearchMovies = async ({
       query: search || ""
     });
     removeTopRatedMovie();
-    const movieListTitle = document.querySelector("#movie-list-title");
-    if (!movieListTitle) return null;
-    movieListTitle.textContent = `"${search}" 검색 결과`;
+    renderSearchTitle(search);
     if (movies.results.length) {
       renderMovieList(movies);
       searchPageState.incrementPage();
@@ -358,19 +376,18 @@ const loadSearchMovies = async ({
     } else {
       renderNoResult();
     }
+    return searchPageState.isLastPage();
   } catch (e) {
     showError(e);
+    return true;
   } finally {
-    removeSkeleton();
+    removeMovieListSkeleton();
   }
 };
-const loadMovieList = () => {
+const loadMovieList = async () => {
   const isSearchParams = hasSearchParams("search");
-  if (isSearchParams) {
-    loadSearchMovies();
-    return;
-  }
-  loadPopularMovies();
+  if (isSearchParams) return await loadSearchMovies();
+  return await loadPopularMovies();
 };
 const loadMovieDetail = async (movieId) => {
   try {
@@ -378,6 +395,8 @@ const loadMovieDetail = async (movieId) => {
     renderMovieDetail(movieDetail);
   } catch (e) {
     showError(e);
+  } finally {
+    removeMovieDetailSkeleton();
   }
 };
 const openMovieModal = () => {
@@ -398,8 +417,9 @@ const handleMovieItemClick = async (e) => {
   if (!movieItem) return;
   const movieId = movieItem.dataset.movieId;
   if (!movieId) return;
-  loadMovieDetail(movieId);
+  renderMovieDetailSkeleton();
   openMovieModal();
+  await loadMovieDetail(movieId);
 };
 const handleModalCloseButtonClick = () => {
   clearMovieDetail();
@@ -408,13 +428,38 @@ const handleModalCloseButtonClick = () => {
 const handleModalEscapeKeydown = handleModalCloseButtonClick;
 const handleModalBackdropClick = handleModalCloseButtonClick;
 const handleRatingStarClick = (index) => {
-  fillStars(index);
-  updateRatingResult(index);
+  const ratingScore = RATING_SCORES[index];
+  if (!isRatingScore(ratingScore)) return;
+  fillRatingStars(index);
+  updateRatingSummary(index);
   const movieModal = document.querySelector(".modal");
   if (!movieModal) return;
   const movieId = movieModal.dataset.movieId;
   if (!movieId) return;
-  setLocalStorage(movieId, RATING_SCORES[index]);
+  ratingStorage.set(movieId, ratingScore);
+};
+let isLoading = false;
+const initializeMovieListObserver = () => {
+  const sentinel = document.querySelector(".scroll-sentinel");
+  if (!sentinel) return;
+  const movieListObserver = new IntersectionObserver(
+    async (entries, observer) => {
+      const [sentinelEntry] = entries;
+      if (!sentinelEntry.isIntersecting) return;
+      if (isLoading) return;
+      isLoading = true;
+      try {
+        const isLastPage = await loadMovieList();
+        if (isLastPage) {
+          observer.disconnect();
+        }
+      } finally {
+        isLoading = false;
+      }
+    },
+    { rootMargin: "300px" }
+  );
+  movieListObserver.observe(sentinel);
 };
 const handleSearchButtonClick = () => {
   const searchInput = document.querySelector("#search-input");
@@ -427,6 +472,7 @@ const handleSearchButtonClick = () => {
   const url = createSearchUrl(baseUrl, search);
   navigate(url);
   loadSearchMovies({ reset: true });
+  initializeMovieListObserver();
 };
 const handleSearchInputEnter = handleSearchButtonClick;
 const bindSearchEvents = () => {
@@ -459,6 +505,9 @@ const bindModalEvents = () => {
     event.stopPropagation();
   });
   document.addEventListener("keydown", (event) => {
+    const modalBackground2 = document.querySelector("#modal-background");
+    if (!modalBackground2?.classList.contains("active")) return;
+    console.log("esc");
     if (event.key === "Escape") {
       handleModalEscapeKeydown();
     }
@@ -476,15 +525,3 @@ addEventListener("load", () => {
   loadMovieList();
   initializeMovieListObserver();
 });
-const initializeMovieListObserver = () => {
-  const movieListObserver = new IntersectionObserver(
-    (entries) => {
-      const [sentinelEntry] = entries;
-      if (!sentinelEntry.isIntersecting) return;
-      loadMovieList();
-    },
-    { rootMargin: "300px" }
-  );
-  const sentinel = document.querySelector(".scroll-sentinel");
-  if (sentinel) movieListObserver.observe(sentinel);
-};
